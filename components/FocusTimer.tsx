@@ -1,17 +1,21 @@
+
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, X, Coffee, Sparkles } from 'lucide-react';
+import { Play, Pause, RotateCcw, X, Coffee, Sparkles, CheckCircle2 } from 'lucide-react';
 import { getStudyTip } from '../services/geminiService';
 
 interface FocusTimerProps {
     isOpen: boolean;
     onClose: () => void;
+    onSessionComplete: (durationSeconds: number) => void;
 }
 
-export const FocusTimer: React.FC<FocusTimerProps> = ({ isOpen, onClose }) => {
-    const [timeLeft, setTimeLeft] = useState(25 * 60);
+export const FocusTimer: React.FC<FocusTimerProps> = ({ isOpen, onClose, onSessionComplete }) => {
+    const DEFAULT_TIME = 25 * 60;
+    const [timeLeft, setTimeLeft] = useState(DEFAULT_TIME);
     const [isActive, setIsActive] = useState(false);
     const [isBreak, setIsBreak] = useState(false);
     const [tip, setTip] = useState<{tip: string, category: string} | null>(null);
+    const [sessionDuration, setSessionDuration] = useState(DEFAULT_TIME);
 
     useEffect(() => {
         let interval: any = null;
@@ -19,22 +23,28 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ isOpen, onClose }) => {
             interval = setInterval(() => {
                 setTimeLeft(timeLeft - 1);
             }, 1000);
-        } else if (timeLeft === 0) {
+        } else if (timeLeft === 0 && isActive) {
+            // Timer finished naturally
             setIsActive(false);
-            // Timer finished
+            
             if (!isBreak) {
+               // Focus Session Completed
+               onSessionComplete(sessionDuration);
+               
                // Switch to break
                fetchTip();
                setIsBreak(true);
                setTimeLeft(5 * 60);
+               setSessionDuration(5 * 60);
             } else {
-                // Back to work
+                // Break Completed
                 setIsBreak(false);
-                setTimeLeft(25 * 60);
+                setTimeLeft(DEFAULT_TIME);
+                setSessionDuration(DEFAULT_TIME);
             }
         }
         return () => clearInterval(interval);
-    }, [isActive, timeLeft, isBreak]);
+    }, [isActive, timeLeft, isBreak, sessionDuration, onSessionComplete]);
 
     const fetchTip = async () => {
         const newTip = await getStudyTip();
@@ -45,7 +55,8 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ isOpen, onClose }) => {
     const resetTimer = () => {
         setIsActive(false);
         setIsBreak(false);
-        setTimeLeft(25 * 60);
+        setTimeLeft(DEFAULT_TIME);
+        setSessionDuration(DEFAULT_TIME);
         setTip(null);
     };
 
@@ -109,8 +120,9 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ isOpen, onClose }) => {
                 </div>
                 
                 <div className="bg-slate-50 dark:bg-slate-800/50 p-4 text-center">
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
-                        {isBreak ? "Take a breath. You earned it." : "Stay present. One task at a time."}
+                    <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-2">
+                        {isBreak ? "Take a breath. You earned it." : "Sessions are saved to your daily stats."}
+                        {!isBreak && <CheckCircle2 size={12} />}
                     </p>
                 </div>
             </div>

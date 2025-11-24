@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Assignment, TaskStatus, Priority } from '../types';
-import { Plus, Check, Wand2, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Check, Wand2, Loader2, Trash2, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
-import { breakDownAssignment } from '../services/geminiService';
+import { breakDownAssignment, parseTaskInput } from '../services/geminiService';
 
 interface AssignmentsProps {
   assignments: Assignment[];
@@ -19,6 +19,10 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
   const [newDate, setNewDate] = useState('');
   const [newPriority, setNewPriority] = useState<Priority>(Priority.MEDIUM);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  
+  // Smart Add State
+  const [smartInput, setSmartInput] = useState('');
+  const [isSmartAdding, setIsSmartAdding] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +38,27 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
     setNewCourse('');
     setNewDate('');
     setNewPriority(Priority.MEDIUM);
+  };
+
+  const handleSmartAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smartInput.trim()) return;
+    setIsSmartAdding(true);
+    try {
+        const result = await parseTaskInput(smartInput);
+        onAddAssignment({
+            title: result.title,
+            course: result.course,
+            dueDate: new Date(result.dueDate),
+            priority: result.priority as Priority
+        });
+        setSmartInput('');
+    } catch (error) {
+        console.error("Smart add failed", error);
+        // Fallback or error toast could go here
+    } finally {
+        setIsSmartAdding(false);
+    }
   };
 
   const handleBreakdown = async (e: React.MouseEvent, assignment: Assignment) => {
@@ -66,15 +91,40 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
 
   return (
     <div className="pb-24 h-full flex flex-col bg-[#FDFBF7] dark:bg-slate-950 transition-colors duration-300">
-      <header className="px-6 pt-10 pb-4 bg-[#FDFBF7] dark:bg-slate-950 sticky top-0 z-20 flex justify-between items-end transition-colors duration-300">
-        <div>
-            <h1 className="text-3xl font-light text-slate-800 dark:text-slate-100">Tasks</h1>
-            <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Prioritize what matters.</p>
+      <header className="px-6 pt-10 pb-4 bg-[#FDFBF7] dark:bg-slate-950 sticky top-0 z-20 transition-colors duration-300">
+        <div className="flex justify-between items-end mb-6">
+            <div>
+                <h1 className="text-3xl font-light text-slate-800 dark:text-slate-100">Tasks</h1>
+                <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Prioritize what matters.</p>
+            </div>
+            <div className="text-right">
+                <span className="text-xs font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider">Pending</span>
+                <p className="text-2xl text-slate-800 dark:text-slate-100 font-light">{assignments.filter(a => a.status !== TaskStatus.DONE).length}</p>
+            </div>
         </div>
-        <div className="text-right">
-             <span className="text-xs font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider">Pending</span>
-             <p className="text-2xl text-slate-800 dark:text-slate-100 font-light">{assignments.filter(a => a.status !== TaskStatus.DONE).length}</p>
-        </div>
+
+        {/* Smart Add Input */}
+        <form onSubmit={handleSmartAdd} className="relative group">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-indigo-500">
+                {isSmartAdding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+            </div>
+            <input 
+                type="text" 
+                value={smartInput}
+                onChange={(e) => setSmartInput(e.target.value)}
+                disabled={isSmartAdding}
+                placeholder={isSmartAdding ? "Analyzing..." : "Ask AI: 'Math homework due Friday high priority'"}
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 shadow-sm focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+            />
+            {smartInput && !isSmartAdding && (
+                <button 
+                    type="submit"
+                    className="absolute right-2 top-2 bottom-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                    Add
+                </button>
+            )}
+        </form>
       </header>
 
       <div className="flex-1 px-6 py-2 space-y-4 overflow-y-auto no-scrollbar">
