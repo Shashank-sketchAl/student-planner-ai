@@ -1,12 +1,17 @@
 
 import React, { useState } from 'react';
-import { Heart, Send, Loader2, Coffee, CloudRain, Wind, Sun, Smile } from 'lucide-react';
-import { getWellBeingAdvice } from '../services/geminiService';
+import { Heart, Send, Loader2, Coffee, CloudRain, Wind, Sun, Smile, Moon, Clock } from 'lucide-react';
+import { getWellBeingAdvice, generateSleepRoutine } from '../services/geminiService';
 
 export const WellBeing: React.FC = () => {
   const [input, setInput] = useState('');
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Sleep Routine State
+  const [classTime, setClassTime] = useState('');
+  const [routine, setRoutine] = useState<string | null>(null);
+  const [loadingRoutine, setLoadingRoutine] = useState(false);
 
   const quickFeelings = [
     { label: "Overwhelmed", icon: Wind, text: "I'm feeling completely overwhelmed with my workload." },
@@ -34,6 +39,20 @@ export const WellBeing: React.FC = () => {
     handleRequest(input);
   };
 
+  const handleCalculateSleep = async () => {
+    if (!classTime) return;
+    setLoadingRoutine(true);
+    setRoutine(null);
+    try {
+        const result = await generateSleepRoutine(classTime);
+        setRoutine(result);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setLoadingRoutine(false);
+    }
+  };
+
   return (
     <div className="pb-24 h-full flex flex-col bg-[#FDFBF7] dark:bg-slate-950 transition-colors duration-300">
       <header className="px-6 pt-10 pb-4 sticky top-0 z-20 bg-[#FDFBF7] dark:bg-slate-950">
@@ -46,6 +65,52 @@ export const WellBeing: React.FC = () => {
 
       <div className="flex-1 px-6 py-2 overflow-y-auto no-scrollbar space-y-6">
         
+        {/* Sleep Calculator Card */}
+        <div className="bg-indigo-900 text-white p-6 rounded-[2rem] shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full -mr-10 -mt-10 blur-3xl opacity-50"></div>
+            
+            <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4 text-indigo-200">
+                    <Moon size={18} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Sleep & Routine</span>
+                </div>
+                
+                {!routine ? (
+                    <>
+                        <h3 className="text-xl font-medium mb-4">When is your first class tomorrow?</h3>
+                        <div className="flex gap-3 mb-4">
+                            <input 
+                                type="time" 
+                                value={classTime}
+                                onChange={(e) => setClassTime(e.target.value)}
+                                className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-indigo-400/30 text-white placeholder-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 [color-scheme:dark]" 
+                            />
+                            <button 
+                                onClick={handleCalculateSleep}
+                                disabled={loadingRoutine || !classTime}
+                                className="px-4 py-3 bg-white text-indigo-900 rounded-xl font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center disabled:opacity-50"
+                            >
+                                {loadingRoutine ? <Loader2 size={20} className="animate-spin" /> : <Clock size={20} />}
+                            </button>
+                        </div>
+                        <p className="text-xs text-indigo-300 opacity-80">We'll calculate the perfect wake-up time and morning ritual for you.</p>
+                    </>
+                ) : (
+                    <div className="animate-in fade-in slide-in-from-bottom-4">
+                        <div className="bg-indigo-800/50 rounded-xl p-4 text-sm leading-relaxed whitespace-pre-line mb-4 border border-indigo-700/50">
+                            {routine}
+                        </div>
+                        <button 
+                            onClick={() => setRoutine(null)}
+                            className="text-indigo-300 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors"
+                        >
+                            Reset
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+
         {/* Response Area */}
         {response ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 pb-20">

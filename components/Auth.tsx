@@ -1,8 +1,15 @@
 
-import React, { useState } from 'react';
-import { Ghost, Crown, Zap, Smile, Star, Rocket, ArrowRight, Loader2, Mail, Lock, User as UserIcon, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Ghost, Crown, Zap, Smile, Star, Rocket, ArrowRight, Loader2, Mail, Lock, User as UserIcon, ShieldCheck, Check } from 'lucide-react';
 import { auth, db } from '../services/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signInAnonymously,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
+} from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { AVATARS } from '../types';
 
@@ -20,6 +27,15 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0].id);
+    const [rememberMe, setRememberMe] = useState(true);
+
+    // Check for saved email on mount
+    useEffect(() => {
+        const savedEmail = localStorage.getItem('mindful_saved_email');
+        if (savedEmail) {
+            setEmail(savedEmail);
+        }
+    }, []);
 
     const getIcon = (iconName: string, size: number) => {
         switch (iconName) {
@@ -41,6 +57,16 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         try {
             if (isLogin) {
                 // Login Flow
+                
+                // Handle manual email memory
+                if (rememberMe) {
+                    localStorage.setItem('mindful_saved_email', email);
+                } else {
+                    localStorage.removeItem('mindful_saved_email');
+                }
+
+                // Configure persistence based on 'Remember Me' checkbox
+                await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
                 await signInWithEmailAndPassword(auth, email, password);
             } else {
                 // Sign Up Flow
@@ -62,6 +88,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             let msg = "An error occurred.";
             if (err.code === 'auth/email-already-in-use') msg = "That email is already in use.";
             if (err.code === 'auth/wrong-password') msg = "Incorrect password.";
+            if (err.code === 'auth/invalid-credential') msg = "Invalid email or password.";
             if (err.code === 'auth/user-not-found') msg = "No account found with this email.";
             if (err.code === 'auth/weak-password') msg = "Password should be at least 6 characters.";
             setError(msg);
@@ -138,6 +165,8 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                     </div>
                                     <input
                                         type="text"
+                                        name="displayName"
+                                        autoComplete="name"
                                         placeholder="What should we call you?"
                                         value={displayName}
                                         onChange={(e) => setDisplayName(e.target.value)}
@@ -152,6 +181,8 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                 </div>
                                 <input
                                     type="email"
+                                    name="email"
+                                    autoComplete="email"
                                     placeholder="Email address"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
@@ -165,6 +196,8 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                 </div>
                                 <input
                                     type="password"
+                                    name="password"
+                                    autoComplete={isLogin ? "current-password" : "new-password"}
                                     placeholder="Password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -172,6 +205,22 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                 />
                             </div>
                         </div>
+
+                        {/* Remember Me Checkbox (Login Only) */}
+                        {isLogin && (
+                            <div className="flex items-center mb-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => setRememberMe(!rememberMe)}
+                                    className="flex items-center gap-2 group"
+                                >
+                                    <div className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-all duration-200 ${rememberMe ? 'bg-indigo-600 border-indigo-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'}`}>
+                                        {rememberMe && <Check size={12} className="text-white" strokeWidth={3} />}
+                                    </div>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Remember me</span>
+                                </button>
+                            </div>
+                        )}
 
                         {error && (
                              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-500 dark:text-rose-300 text-sm text-center font-medium">

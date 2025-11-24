@@ -64,6 +64,31 @@ export interface StudySession {
     subject?: string;
 }
 
+export interface Note {
+    id: string;
+    userId: string;
+    topic: string;
+    content: string;
+    type: 'SUMMARY' | 'BULLETS' | 'CHEAT_SHEET';
+    createdAt: Date;
+}
+
+export interface Flashcard {
+    id: string;
+    front: string;
+    back: string;
+    status: 'new' | 'learning' | 'mastered';
+}
+
+export interface FlashcardDeck {
+    id: string;
+    userId: string;
+    topic: string;
+    cards: Flashcard[];
+    createdAt: Date;
+    mastery: number; // 0-100
+}
+
 export const AVATARS = [
     { id: 'ghost', icon: 'Ghost', color: 'indigo', label: 'Spirit' },
     { id: 'crown', icon: 'Crown', color: 'amber', label: 'Royal' },
@@ -73,4 +98,4 @@ export const AVATARS = [
     { id: 'rocket', icon: 'Rocket', color: 'orange', label: 'Boost' },
 ];
 
-export type ViewState = 'DASHBOARD' | 'SCHEDULE' | 'ASSIGNMENTS' | 'EXAMS' | 'SETTINGS' | 'VEO' | 'WELLBEING';
+export type ViewState = 'DASHBOARD' | 'SCHEDULE' | 'ASSIGNMENTS' | 'EXAMS' | 'SETTINGS' | 'VEO' | 'WELLBEING' | 'REVISION' | 'VOICE' | 'DISTRACTION' | 'STATS' | 'FLASHCARDS' | 'GARDEN';

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { Assignment, TaskStatus, Priority } from '../types';
-import { Plus, Check, Wand2, Loader2, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Check, Wand2, Loader2, Trash2, Sparkles, Camera, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import { breakDownAssignment, parseTaskInput } from '../services/geminiService';
+import { breakDownAssignment, parseTaskInput, extractTasksFromImage } from '../services/geminiService';
 
 interface AssignmentsProps {
   assignments: Assignment[];
@@ -23,6 +24,10 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
   // Smart Add State
   const [smartInput, setSmartInput] = useState('');
   const [isSmartAdding, setIsSmartAdding] = useState(false);
+
+  // OCR State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +60,33 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
         setSmartInput('');
     } catch (error) {
         console.error("Smart add failed", error);
-        // Fallback or error toast could go here
     } finally {
         setIsSmartAdding(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingImage(true);
+    try {
+        const tasks = await extractTasksFromImage(file);
+        tasks.forEach(task => {
+            onAddAssignment({
+                title: task.title,
+                course: task.course,
+                dueDate: new Date(task.dueDate),
+                priority: task.priority as Priority
+            });
+        });
+        alert(`Extracted ${tasks.length} tasks from image!`);
+    } catch (error) {
+        console.error("Image processing failed", error);
+        alert("Could not read tasks from this image.");
+    } finally {
+        setIsProcessingImage(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -104,27 +133,47 @@ export const Assignments: React.FC<AssignmentsProps> = ({ assignments, onAddAssi
         </div>
 
         {/* Smart Add Input */}
-        <form onSubmit={handleSmartAdd} className="relative group">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-indigo-500">
-                {isSmartAdding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+        <div className="relative group flex gap-2">
+            <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-indigo-500">
+                    {isSmartAdding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                </div>
+                <form onSubmit={handleSmartAdd}>
+                    <input 
+                        type="text" 
+                        value={smartInput}
+                        onChange={(e) => setSmartInput(e.target.value)}
+                        disabled={isSmartAdding || isProcessingImage}
+                        placeholder={isSmartAdding ? "Analyzing..." : isProcessingImage ? "Reading image..." : "Ask AI: 'History essay due Friday'"}
+                        className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 shadow-sm focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+                    />
+                    {smartInput && !isSmartAdding && (
+                        <button 
+                            type="submit"
+                            className="absolute right-2 top-2 bottom-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                        >
+                            Add
+                        </button>
+                    )}
+                </form>
             </div>
+            
+            {/* Image Upload Button */}
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingImage || isSmartAdding}
+                className="w-14 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:border-indigo-200 dark:hover:border-indigo-900 transition-colors shadow-sm"
+            >
+                {isProcessingImage ? <Loader2 size={20} className="animate-spin text-indigo-500"/> : <Camera size={20} />}
+            </button>
             <input 
-                type="text" 
-                value={smartInput}
-                onChange={(e) => setSmartInput(e.target.value)}
-                disabled={isSmartAdding}
-                placeholder={isSmartAdding ? "Analyzing..." : "Ask AI: 'Math homework due Friday high priority'"}
-                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 shadow-sm focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*"
+                onChange={handleImageUpload}
             />
-            {smartInput && !isSmartAdding && (
-                <button 
-                    type="submit"
-                    className="absolute right-2 top-2 bottom-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
-                >
-                    Add
-                </button>
-            )}
-        </form>
+        </div>
       </header>
 
       <div className="flex-1 px-6 py-2 space-y-4 overflow-y-auto no-scrollbar">

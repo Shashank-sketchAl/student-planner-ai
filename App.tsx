@@ -8,8 +8,14 @@ import { Exams } from './components/Exams';
 import { FocusTimer } from './components/FocusTimer';
 import { VeoVideo } from './components/VeoVideo';
 import { WellBeing } from './components/WellBeing';
+import { SmartNotes } from './components/SmartNotes';
+import { VoiceAssistant } from './components/VoiceAssistant';
+import { DistractionBlocker } from './components/DistractionBlocker';
+import { ProgressStats } from './components/ProgressStats';
+import { Flashcards } from './components/Flashcards';
+import { MindGarden } from './components/MindGarden';
 import { Auth } from './components/Auth';
-import { ViewState, ClassSession, Assignment, Exam, TaskStatus, UserProfile, StudySession } from './types';
+import { ViewState, ClassSession, Assignment, Exam, TaskStatus, UserProfile, StudySession, Note, FlashcardDeck } from './types';
 import { format } from 'date-fns';
 import { Loader2, Moon, Sun, LogOut } from 'lucide-react';
 import { auth, db } from './services/firebase';
@@ -35,6 +41,8 @@ const App: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [decks, setDecks] = useState<FlashcardDeck[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -108,12 +116,14 @@ const App: React.FC = () => {
   };
 
   // Helper to save local data
-  const saveLocalData = (newAssignments: Assignment[], newExams: Exam[], newClasses: ClassSession[], newSessions: StudySession[]) => {
+  const saveLocalData = (newAssignments: Assignment[], newExams: Exam[], newClasses: ClassSession[], newSessions: StudySession[], newNotes: Note[], newDecks: FlashcardDeck[]) => {
       const data = {
           assignments: newAssignments,
           exams: newExams,
           classes: newClasses,
-          sessions: newSessions
+          sessions: newSessions,
+          notes: newNotes,
+          decks: newDecks
       };
       localStorage.setItem('mindful_planner_data', JSON.stringify(data));
   };
@@ -132,6 +142,8 @@ const App: React.FC = () => {
                 setExams((parsed.exams || []).map((e: any) => ({ ...e, date: new Date(e.date) })));
                 setClasses(parsed.classes || []);
                 setStudySessions((parsed.sessions || []).map((s: any) => ({...s, timestamp: new Date(s.timestamp)})));
+                setNotes((parsed.notes || []).map((n: any) => ({...n, createdAt: new Date(n.createdAt)})));
+                setDecks((parsed.decks || []).map((d: any) => ({...d, createdAt: new Date(d.createdAt)})));
             }
         } catch (e) {
             console.error("Failed to load local data", e);
@@ -190,11 +202,35 @@ const App: React.FC = () => {
         }, handleSyncError
     );
 
+    const qNotes = query(collection(db, 'notes'), where('userId', '==', user.uid));
+    const unsubNotes = onSnapshot(qNotes,
+        (snapshot) => {
+            const data = snapshot.docs.map(doc => {
+                const d = doc.data();
+                return { id: doc.id, ...d, createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date() };
+            }) as Note[];
+            setNotes(data.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()));
+        }, handleSyncError
+    );
+
+    const qDecks = query(collection(db, 'flashcard_decks'), where('userId', '==', user.uid));
+    const unsubDecks = onSnapshot(qDecks,
+        (snapshot) => {
+            const data = snapshot.docs.map(doc => {
+                const d = doc.data();
+                return { id: doc.id, ...d, createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date() };
+            }) as FlashcardDeck[];
+            setDecks(data.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()));
+        }, handleSyncError
+    );
+
     return () => {
         unsubAssignments();
         unsubExams();
         unsubClasses();
         unsubSessions();
+        unsubNotes();
+        unsubDecks();
     };
   }, [user, isOfflineMode]);
 
@@ -214,7 +250,7 @@ const App: React.FC = () => {
           const session = { ...newSession, id: Math.random().toString(36).substr(2, 9) };
           const updated = [session, ...studySessions];
           setStudySessions(updated);
-          saveLocalData(assignments, exams, classes, updated);
+          saveLocalData(assignments, exams, classes, updated, notes, decks);
           return;
       }
 
@@ -237,7 +273,7 @@ const App: React.FC = () => {
         };
         const updated = [...assignments, assignment].sort((a,b) => a.dueDate.getTime() - b.dueDate.getTime());
         setAssignments(updated);
-        saveLocalData(updated, exams, classes, studySessions);
+        saveLocalData(updated, exams, classes, studySessions, notes, decks);
         return;
     }
     try {
@@ -253,7 +289,7 @@ const App: React.FC = () => {
             a.id === id ? { ...a, status: a.status === TaskStatus.DONE ? TaskStatus.TODO : TaskStatus.DONE } : a
         );
         setAssignments(updated);
-        saveLocalData(updated, exams, classes, studySessions);
+        saveLocalData(updated, exams, classes, studySessions, notes, decks);
         return;
     }
     const task = assignments.find(a => a.id === id);
@@ -269,7 +305,7 @@ const App: React.FC = () => {
     if (isOfflineMode) {
         const updated = assignments.map(a => a.id === id ? { ...a, subtasks, isAiGenerated: true } : a);
         setAssignments(updated);
-        saveLocalData(updated, exams, classes, studySessions);
+        saveLocalData(updated, exams, classes, studySessions, notes, decks);
         return;
     }
     try {
@@ -281,10 +317,22 @@ const App: React.FC = () => {
     if (isOfflineMode) {
         const updated = assignments.filter(a => a.id !== id);
         setAssignments(updated);
-        saveLocalData(updated, exams, classes, studySessions);
+        saveLocalData(updated, exams, classes, studySessions, notes, decks);
         return;
     }
     try { await deleteDoc(doc(db, 'assignments', id)); } catch (e) { console.error(e); }
+  };
+
+  const rescheduleTask = async (id: string, newDate: Date) => {
+      if (isOfflineMode) {
+          const updated = assignments.map(a => a.id === id ? { ...a, dueDate: newDate } : a);
+          setAssignments(updated);
+          saveLocalData(updated, exams, classes, studySessions, notes, decks);
+          return;
+      }
+      try {
+          await updateDoc(doc(db, 'assignments', id), { dueDate: Timestamp.fromDate(newDate) });
+      } catch (e) { console.error(e); }
   };
 
   const addExam = async (newExam: Omit<Exam, 'id'>) => {
@@ -294,7 +342,7 @@ const App: React.FC = () => {
         const exam: Exam = { id: newId, ...newExam };
         const updated = [...exams, exam].sort((a,b) => a.date.getTime() - b.date.getTime());
         setExams(updated);
-        saveLocalData(assignments, updated, classes, studySessions);
+        saveLocalData(assignments, updated, classes, studySessions, notes, decks);
         return;
     }
     try {
@@ -306,7 +354,7 @@ const App: React.FC = () => {
     if (isOfflineMode) {
         const updated = exams.filter(e => e.id !== id);
         setExams(updated);
-        saveLocalData(assignments, updated, classes, studySessions);
+        saveLocalData(assignments, updated, classes, studySessions, notes, decks);
         return;
     }
     try { await deleteDoc(doc(db, 'exams', id)); } catch (e) { console.error(e); }
@@ -319,7 +367,7 @@ const App: React.FC = () => {
         const cls: ClassSession = { id: newId, ...newClass };
         const updated = [...classes, cls];
         setClasses(updated);
-        saveLocalData(assignments, exams, updated, studySessions);
+        saveLocalData(assignments, exams, updated, studySessions, notes, decks);
         return;
     }
     try {
@@ -331,11 +379,62 @@ const App: React.FC = () => {
     if (isOfflineMode) {
         const updated = classes.filter(c => c.id !== id);
         setClasses(updated);
-        saveLocalData(assignments, exams, updated, studySessions);
+        saveLocalData(assignments, exams, updated, studySessions, notes, decks);
         return;
     }
     try { await deleteDoc(doc(db, 'classes', id)); } catch (e) { console.error(e); }
   };
+
+  const addNote = async (newNote: Omit<Note, 'id'>) => {
+      if (!user) return;
+      if (isOfflineMode) {
+          const newId = Math.random().toString(36).substr(2, 9);
+          const note: Note = { id: newId, ...newNote, userId: user.uid };
+          const updated = [note, ...notes];
+          setNotes(updated);
+          saveLocalData(assignments, exams, classes, studySessions, updated, decks);
+          return;
+      }
+      try {
+          await addDoc(collection(db, 'notes'), { ...newNote, userId: user.uid, createdAt: Timestamp.fromDate(newNote.createdAt) });
+      } catch (e) { console.error(e); }
+  };
+
+  const deleteNote = async (id: string) => {
+      if (isOfflineMode) {
+          const updated = notes.filter(n => n.id !== id);
+          setNotes(updated);
+          saveLocalData(assignments, exams, classes, studySessions, updated, decks);
+          return;
+      }
+      try { await deleteDoc(doc(db, 'notes', id)); } catch (e) { console.error(e); }
+  };
+
+  const addDeck = async (newDeck: Omit<FlashcardDeck, 'id'>) => {
+    if (!user) return;
+    if (isOfflineMode) {
+        const newId = Math.random().toString(36).substr(2, 9);
+        const deck: FlashcardDeck = { id: newId, ...newDeck, userId: user.uid };
+        const updated = [deck, ...decks];
+        setDecks(updated);
+        saveLocalData(assignments, exams, classes, studySessions, notes, updated);
+        return;
+    }
+    try {
+        await addDoc(collection(db, 'flashcard_decks'), { ...newDeck, userId: user.uid, createdAt: Timestamp.fromDate(newDeck.createdAt) });
+    } catch (e) { console.error(e); }
+  };
+
+  const deleteDeck = async (id: string) => {
+    if (isOfflineMode) {
+        const updated = decks.filter(d => d.id !== id);
+        setDecks(updated);
+        saveLocalData(assignments, exams, classes, studySessions, notes, updated);
+        return;
+    }
+    try { await deleteDoc(doc(db, 'flashcard_decks', id)); } catch (e) { console.error(e); }
+  };
+
 
   if (loading) {
     return (
@@ -387,8 +486,26 @@ const App: React.FC = () => {
               onDeleteAssignment={onDeleteAssignment}
             />
           )}
+          {view === 'FLASHCARDS' && (
+              <Flashcards decks={decks} onAddDeck={addDeck} onDeleteDeck={deleteDeck} />
+          )}
+           {view === 'GARDEN' && (
+              <MindGarden sessions={studySessions} />
+          )}
           {view === 'EXAMS' && (
              <Exams exams={exams} onAddExam={addExam} onDeleteExam={deleteExam} onAddAssignment={addAssignment} />
+          )}
+          {view === 'REVISION' && (
+              <SmartNotes notes={notes} onSaveNote={addNote} onDeleteNote={deleteNote} />
+          )}
+          {view === 'VOICE' && (
+              <VoiceAssistant onAddTask={addAssignment} onAddExam={addExam} />
+          )}
+          {view === 'DISTRACTION' && (
+              <DistractionBlocker tasks={assignments} onRescheduleTask={rescheduleTask} />
+          )}
+          {view === 'STATS' && (
+              <ProgressStats sessions={studySessions} />
           )}
           {view === 'WELLBEING' && <WellBeing />}
           {view === 'VEO' && <VeoVideo />}

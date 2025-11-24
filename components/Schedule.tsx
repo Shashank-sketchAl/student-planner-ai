@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { ClassSession } from '../types';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Sparkles, Mic, MicOff } from 'lucide-react';
+import { parseClassInput } from '../services/geminiService';
 
 interface ScheduleProps {
   schedule: ClassSession[];
@@ -23,9 +25,73 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedule, onAddClass, onDele
   const [day, setDay] = useState('Mon');
   const [color, setColor] = useState('blue');
 
+  // Smart Add State
+  const [smartInput, setSmartInput] = useState('');
+  const [isSmartAdding, setIsSmartAdding] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   const filteredClasses = schedule
     .filter((c) => c.day === activeDay)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
+
+        recognitionRef.current.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setSmartInput(transcript);
+            setIsListening(false);
+            // Optionally auto-submit
+            // handleSmartAdd({ preventDefault: () => {} } as any);
+        };
+
+        recognitionRef.current.onend = () => setIsListening(false);
+        recognitionRef.current.onerror = () => setIsListening(false);
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+        recognitionRef.current?.stop();
+    } else {
+        setSmartInput('');
+        recognitionRef.current?.start();
+        setIsListening(true);
+    }
+  };
+
+  const handleSmartAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smartInput.trim()) return;
+    setIsSmartAdding(true);
+    try {
+        const classes = await parseClassInput(smartInput);
+        if (classes.length > 0) {
+            classes.forEach(c => {
+                onAddClass({
+                    name: c.name,
+                    room: c.room,
+                    startTime: c.startTime,
+                    endTime: c.endTime,
+                    day: c.day,
+                    color: c.color
+                });
+            });
+            setSmartInput('');
+            // Optional: Show success feedback
+        }
+    } catch (error) {
+        console.error("Smart add failed", error);
+    } finally {
+        setIsSmartAdding(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +118,39 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedule, onAddClass, onDele
     <div className="pb-24 flex flex-col h-full bg-[#FDFBF7] dark:bg-slate-950 transition-colors duration-300">
       <header className="px-6 pt-10 sticky top-0 z-20 bg-[#FDFBF7] dark:bg-slate-950 transition-colors duration-300">
         <h1 className="text-3xl font-light text-slate-800 dark:text-slate-100 mb-6">Timetable</h1>
+        
+        {/* Smart Add Input */}
+        <form onSubmit={handleSmartAdd} className="relative group mb-6">
+            <div className="absolute inset-y-0 left-4 flex items-center text-indigo-500">
+                {isSmartAdding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+            </div>
+            <input 
+                type="text" 
+                value={smartInput}
+                onChange={(e) => setSmartInput(e.target.value)}
+                disabled={isSmartAdding}
+                placeholder={isListening ? "Listening..." : "Voice add: 'Math on Mon/Wed at 10am'"}
+                className={`w-full pl-12 pr-12 py-4 rounded-2xl bg-white dark:bg-slate-900 border ${isListening ? 'border-rose-400 ring-2 ring-rose-100 dark:ring-rose-900' : 'border-indigo-100 dark:border-slate-800'} shadow-sm focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 transition-all`}
+            />
+            {/* Mic Button */}
+            <button 
+                type="button"
+                onClick={toggleListening}
+                className={`absolute right-3 top-3 bottom-3 w-10 rounded-xl flex items-center justify-center transition-colors ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'}`}
+            >
+                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+            
+            {smartInput && !isSmartAdding && !isListening && (
+                <button 
+                    type="submit"
+                    className="absolute right-14 top-3 bottom-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                    Add
+                </button>
+            )}
+        </form>
+
         <div className="flex justify-between bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-sm border border-slate-50 dark:border-slate-800 mb-2 overflow-x-auto">
           {DAYS.map((d) => (
             <button

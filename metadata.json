@@ -1,5 +1,7 @@
 {
   "name": "MindfulStudent Planner",
   "description": "A calm, intelligent planner for students featuring schedule management, assignment tracking with AI-powered breakdown, and exam countdowns.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

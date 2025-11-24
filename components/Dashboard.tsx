@@ -376,8 +376,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </div>
                     ) : (
                         <div className="animate-in fade-in slide-in-from-bottom-4">
-                            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-line border border-slate-100 dark:border-slate-800 shadow-inner">
-                                {coachAdvice}
+                            {/* Updated Font Size to text-xl (was text-base) and text-lg on dark */}
+                            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl text-slate-700 dark:text-slate-200 text-lg leading-relaxed whitespace-pre-line border border-slate-100 dark:border-slate-800 shadow-inner font-medium">
+                                {coachAdvice.replace(/<[^>]*>/g, '')}
                             </div>
                             <button 
                                 onClick={() => setCoachAdvice('')}
